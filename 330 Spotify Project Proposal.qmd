@@ -1,0 +1,300 @@
+---
+title: "Spotify Project Proposal"
+authors: Isaiah Cabrinha, Gunnar Griffith, Kate West
+format: 
+  pdf:
+    embed-resources: true 
+---
+
+```{=html}
+<style type="text/css">
+h1.title {
+  font-size: 40px;
+  text-align: center;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readr)
+library(broom)
+library(ggplot2)
+library(dplyr)
+library(ggeffects)
+```
+
+# 1 Group Members and Confirmation That You Have Read Final Project Instructions
+
+The members of our group are Isaiah Cabrinha, Gunnar Griffith, and Kate West.
+
+We have each read the full 5-page project instructions.
+
+# 2 Data Set
+
+For our final project we intend to use a dataset containing all of the "Top 200" playlists published globally by Spotify. Spotify introduces a new playlist each day, so this dataset contains all the playlists from January 1, 2017 to May 29, 2023. The dataset can be found here: https://www.kaggle.com/datasets/brunoalarcon123/top-200-spotify-songs-dataset
+
+The dataset contains:
+
+-   Song Rank
+
+-   Title of the Song
+
+-   Artist Name
+
+-   Date
+
+-   Nationality of each artist
+
+-   Artist's Continent
+
+-   Unique Song ID
+
+-   URL Link to the song
+
+-   Danceability: Describes how suitable a track is for dancing from a proportion from 0 to 1. 0 being not suitable, and 1 being the most suitable
+
+-   Energy: Represents a perceptual measure of instensity and activity measured with a proportion from 0 to 1. 0 being slow and calm, 1 being the most energetic, fast, loud, and noisy.
+
+-   Loudness: The overall loudness of a track in decibels (dB).
+
+-   Speechiness: Detects the presence of spoken words in a track, measured with a proportion from 0 to 1. 0 being all words were sung, and 1 being all words were spoken the whole song.
+
+-   Acoustiness: Describes whether a track uses only, or primarily, instruments that produce sound through acoustic means. Measured with a proportion from 0 to 1. 0 being the absence of acoustic instruments, and 1 being only acoustic instruments.
+
+-   Instrumentalness: Predicts whether a track contains no vocals. Measured with a proportion from 0 to 1. 0 being it contains vocals, 1 being it contains no vocals.
+
+-   Valence: Describes the musical positiveness of a track. Measured with a proportion from 0 to 1. 0 being sad, depressed, angry, and 1 being happy, cheerful, euphoric
+
+The dataset also includes a custom ranking, attributing points to each song based on its playlist placement. The scoring system functions by giving the top song 200 points and as each rank decreases, the point is subtracted by 1. So the rank 2 song has 199 points and the rank 200 song has 1 point. Furthermore if multiple artists collaborated on the song, each artist is partitioned an equal amount of points based on the rank of the song.
+
+```{r}
+proj_data = read_delim("Spotify_Dataset_V3.csv", delim = ';')
+
+#Starting the new dataset
+spotify_clean <- proj_data %>%
+  select(
+    Title,
+    Rank,
+    Artists,
+    Danceability,
+    Energy,
+    Loudness,
+    Speechiness,
+    Acousticness,
+    Instrumentalness,
+    Valence
+  )
+
+#Creating multi-artist variable so we can easily use it later
+spotify_clean <- spotify_clean %>%
+  mutate(
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  )
+
+#Now flipping the rank variable because 1 should be the best so it's easy to understand
+spotify_clean <- spotify_clean %>%
+  mutate(
+    rank_score = 201 - Rank
+  )
+
+#Trying now to create a "How long the song stayed in the Top 200 Variable"
+spotify_clean <- spotify_clean %>%
+  group_by(Title) %>%
+  mutate(
+    days_in_top200 = n(),
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  ) %>%
+  ungroup()
+
+song_level <- spotify_clean %>%
+  group_by(Title, Artists) %>%
+  summarise(
+    avg_rank_score = mean(rank_score),
+    days_in_top200 = n(),
+    multi_artist = first(multi_artist),
+    Danceability = first(Danceability),
+    Energy = first(Energy),
+    Loudness = first(Loudness),
+    Speechiness = first(Speechiness),
+    Acousticness = first(Acousticness),
+    Instrumentalness = first(Instrumentalness),
+    Valence = first(Valence),
+    .groups = "drop"
+  )
+
+
+#view(spotify_clean)
+head(song_level)
+```
+
+# 3 Potential Questions of Interest
+
+1.  Which audio features significantly predict rank?
+2.  Do songs performed by multiple artists achieve higher rank than solo-artist songs, after controlling for audio characteristics?
+
+For the first question, we feel like people, specifically artists, would be interested in this because whichever audio feature predicts rank the best, should be the feature that they should consider incorporating into their song.
+
+For the second question, we feel that alongside audio features, knowing whether or not collaborating with another artist will make you more or less money based on the rank of your song, is beneficial in a competitive musical scene.
+
+# 4 Exploratory Data Analysis
+
+```{r}
+
+
+#Loudness removed
+model_clean <- lm(avg_rank_score ~ Danceability + Energy +
+                    Speechiness + Acousticness +
+                    Instrumentalness + Valence +
+                    multi_artist,
+                  data = song_level)
+
+#summary(model_clean)
+
+```
+
+**FIGURE 1**
+
+```{r}
+
+coef_data <- tidy(model_clean, conf.int = TRUE) %>%
+  filter(term != "(Intercept)")
+
+ggplot(coef_data,
+       aes(x = estimate,
+           y = reorder(term, estimate))) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = conf.low,
+                     xmax = conf.high),
+                 height = 0.2) +
+  geom_vline(xintercept = 0,
+             linetype = "dashed",
+             color = "red") +
+  labs(
+    title = "Which Audio Features Predict Higher Spotify Rank?",
+    x = "Estimated Effect on Average Rank Score",
+    y = "Predictor"
+  ) +
+  theme_minimal()
+
+```
+
+In this Graph it is interesting that most variables seem to not be statistically significant except for Valence and Energy. However, they are negative, so it seems that they decrease rank score, which is very surprising to us.
+
+**FIGURE 2**
+
+```{r}
+pred_multi <- ggpredict(model_clean, terms = "multi_artist")
+
+plot(pred_multi) +
+  labs(
+    title = "Adjusted Effect of Multi-Artist Songs on Rank",
+    x = "Multi Artist (0 = Solo, 1 = Collaboration)",
+    y = "Predicted Average Rank Score"
+  )
+```
+
+In this graph it seems that there is a slight positive trend in favor of Collaboration, which isn't too surprising since it will bring in fan bases from both artists.
+
+**FIGURE 3**
+
+```{r}
+ggplot(song_level,
+       aes(x = days_in_top200,
+           y = avg_rank_score)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(
+    title = "Do Songs That Stay Longer Rank Better?",
+    x = "Days in Top 200",
+    y = "Average Rank Score"
+  ) +
+  theme_minimal()
+```
+
+While the linear trend line doesn't fit perfectly, we can see that in general, songs that last longer in the top 200 tend to have higher ranked scores. It is also interesting to see that most of the data points are clustered from 1 day to around 200 days, indicating that majority of the songs don't have a long shelf life in the top 200.
+
+# 5 Preliminary Model Fit
+
+For this model, we have chosen valence as our explanatory variable and days spent in the top 200 tracks on Spotify as the response variable. As explained previously, Valence is a score from 0 to 1 describing the perceived "positiveness" of the music in a song. Music artists may be interested to learn if there is an association between the happiness of their song and its popularity.
+
+```{r}
+# Fit the lm
+spotify_fit <- lm(days_in_top200 ~ Valence, data = song_level)
+
+summary(spotify_fit)
+```
+
+**LINEARITY:**
+
+```{r}
+#Linearity Assumption
+ggplot(data = song_level, mapping = aes(x = Valence, y = days_in_top200)) + 
+  
+  labs(
+    title = "Relationship between a Song's Valence and its Days Spent in the Top 200", 
+    x = "Valence (Musical Positiveness)", 
+    y = "Days Spent in the Top 200 Songs on Spotify") +
+  
+  geom_point() + geom_smooth(method = lm)
+```
+
+The linearity assumption for regression does not appear to be met from this plot. Much of the data is clustered around the very bottom, with only the tiniest amount of difference in low to high valence songs.
+
+**INDEPENDENCE:**
+
+We believe that the independence assumption is met well-enough to perform linear regression. Although songs by the same artist or released at a specific time could be correlated in popularity, we do not see any serious concerns with this assumption.
+
+**NORMALITY:**
+
+```{r}
+#Normality
+
+hist(spotify_fit$residuals) #Histogram
+
+plot(spotify_fit, which = 2) #Q-Q Plot
+
+# Our sample is too large for the Shapiro-Wilk, but we can take a random sample of residuals
+sample_resid <- sample(spotify_fit$residuals, 5000)
+
+shapiro.test(sample_resid)
+```
+
+The histogram appears to have a *strong* right skew, with the majority of the residuals clustered around zero. The QQ plot also does not align with normality well, exhibiting the same extreme right skew. The most telling of the analyses is the Shapiro-Wilk test, which has a p-value of nearly 0. This means that we reject the normality assumption.
+
+**EQUAL VARIANCE and INFLUENTIAL POINTS:**
+
+```{r}
+#Equal Var Assumption
+
+# Fitted values v Residuals Plot
+plot(spotify_fit$fitted.values, spotify_fit$residuals)
+abline(h = 0, col= 'red')
+
+#Influential Points
+plot(spotify_fit, which = 4) # produces the Cook's distance plot
+plot(spotify_fit, which = 5) # produces the Residuals by leverage plot
+```
+
+We have some outlier points, particularly observations like 6186 and 7653. However, these don't appear to be the problem in the equal variance assumption. Our residuals are extremely clustered toward the bottom of the plot and then spread out as we go further up. Therefore, the equal variance assumption does not appear to be met.
+
+**INTERPRETATION OF MODEL PARAMETERS:**
+
+Our slope of 57.606 means that, for a one-unit increase in valence, the days a song spent on the Top 200 went up by 57.606 days. Adjusting for the fact that valence is measured on a 0 to 1 scale, this can be interpreted as a 5.76 day increase for each .1 added to the valence score. The intercept of 55.473 means that when the valence score of a song is 0, it spent an average of 55 days on Spotify's Top 200 list.
+
+We did have a high F statistic and very low p-value, which would typically mean that valence explains a good amount of the variability in Top 200, but our R\^2 of .0043 shows that our model only explains .43% of the variation. The inflated F statistic and low p value could be due to our large sample size of nearly 8000.
+
+**CONFIDENCE INTERVAL:**
+
+```{r}
+#Confidence Interval
+confint(spotify_fit)
+```
+
+We are 95% confident that a one-unit increase in valence is associated with between 39 and 77 additional days charted, on average.
+
+**CONCLUSION**
+
+After analyzing the data using both Exploratory and Regression techniques, we still believe there is an interesting relationship between audio characteristics of songs and their popularity. As we continue with further analyses, we will need to transform the data in some way in order to meet the core regression assumptions. One possible transformation is to take a log of the days spent on the Top 200 list to reduce the right skew.
+
+Through our future analysis, we hope to be able to uncover insights for music artists and producers, such as which musical components might contribute most to long-term popularity. These findings may be able to help inform decisions about the direction musicians want to take in the future.
