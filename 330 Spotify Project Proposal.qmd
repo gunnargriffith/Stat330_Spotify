@@ -125,7 +125,8 @@ song_level <- spotify_clean %>%
 
 
 #view(spotify_clean)
-head(song_level)
+head(song_level, n = 20
+    )
 ```
 
 # 3 Potential Questions of Interest
