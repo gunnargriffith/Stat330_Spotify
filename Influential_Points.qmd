@@ -4,4 +4,179 @@ format: html
 editor: visual
 ---
 
-## TESTINGGGGGGGGGGGGGGGGG
+# Influential Points in our Spotify Data Analysis
+
+## Data Prep
+
+```{r}
+library(tidyverse)
+
+setwd("/Users/katewest/Desktop/330 final project")
+
+proj_data = read_delim("Spotify_Dataset_V3.csv", delim = ';')
+head(proj_data)
+
+# Starting the new dataset
+spotify_clean <- proj_data %>%
+  select(
+    Title,
+    Rank,
+    Artists,
+    Danceability,
+    Energy,
+    Loudness,
+    Speechiness,
+    Acousticness,
+    Instrumentalness,
+    Valence
+  )
+
+# Creating multi-artist variable so we can easily use it later
+spotify_clean <- spotify_clean %>%
+  mutate(
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  )
+
+# Now flipping the rank variable because 1 should be the best so it's easy to understand
+spotify_clean <- spotify_clean %>%
+  mutate(
+    rank_score = 201 - Rank
+  )
+
+# Trying now to create a "How long the song stayed in the Top 200" variable
+spotify_clean <- spotify_clean %>%
+  group_by(Title) %>%
+  mutate(
+    days_in_top200 = n(),
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  ) %>%
+  ungroup()
+
+spotify_data <- spotify_clean %>%
+  group_by(Title, Artists) %>%
+  summarise(
+    avg_rank_score = mean(rank_score),
+    days_in_top200 = n(),
+    multi_artist = first(multi_artist),
+    Danceability = first(Danceability),
+    Energy = first(Energy),
+    Loudness = first(Loudness),
+    Speechiness = first(Speechiness),
+    Acousticness = first(Acousticness),
+    Instrumentalness = first(Instrumentalness),
+    Valence = first(Valence),
+    .groups = "drop"
+  )
+
+head(spotify_data)
+```
+
+## Fit Models
+
+```{r}
+model_top200 <- lm(days_in_top200 ~ Danceability + Energy + Loudness + Speechiness +
+              Acousticness + Instrumentalness + Valence + multi_artist,
+            data = spotify_data)
+
+
+model_rank <- lm(avg_rank_score ~ Danceability + Energy + Loudness + Speechiness +
+              Acousticness + Instrumentalness + Valence + multi_artist,
+            data = spotify_data)
+
+summary(model_top200)
+summary(model_rank)
+```
+
+## Cook's Distance
+
+```{r}
+# Cook’s distance
+cooks_d_top200 <- cooks.distance(model_top200)
+cooks_d_rank <- cooks.distance(model_rank)
+
+# Plots
+plot(cooks_d_top200, type = "h", main = "Cook's Distance (Top 200)")
+plot(cooks_d_rank, type = "h", main = "Cook's Distance (Rank)")
+
+# Top 10
+cooks_table_top200 <- data.frame(
+  Title = spotify_data$Title,
+  Artists = spotify_data$Artists,
+  cooks = cooks_d_top200
+)
+
+cooks_table_top200 %>%
+  arrange(desc(cooks)) %>%
+  slice_head(n = 10)
+```
+
+## Leverage
+
+```{r}
+# Leverage
+leverage_top200 <- hatvalues(model_top200)
+leverage_rank <- hatvalues(model_rank)
+
+# Plots
+plot(model_top200, which = 5)
+plot(model_rank, which = 5)
+
+# Top leverage points
+leverage_table_top200 <- data.frame(
+  Title = spotify_data$Title,
+  Artists = spotify_data$Artists,
+  leverage = leverage_top200
+)
+
+leverage_table_top200 %>%
+  arrange(desc(leverage)) %>%
+  slice_head(n = 10)
+```
+
+# Analysis on Removal of Influential Points
+
+```{r}
+# Remove Cook's > 0.01
+spotify_no_outliers <- spotify_data %>%
+  anti_join(
+    cooks_table_top200 %>%
+      filter(cooks > 0.01) %>%
+      select(Title, Artists),
+    by = c("Title", "Artists")
+  )
+
+# Refit models
+model_top200_clean <- lm(days_in_top200 ~ Danceability + Energy + Loudness +
+                           Speechiness + Acousticness + Instrumentalness +
+                           Valence + multi_artist,
+                         data = spotify_no_outliers)
+
+model_rank_clean <- lm(avg_rank_score ~ Danceability + Energy + Loudness +
+                          Speechiness + Acousticness + Instrumentalness +
+                          Valence + multi_artist,
+                        data = spotify_no_outliers)
+
+summary(model_top200_clean)
+summary(model_rank_clean)
+
+
+#High Leverage and High Cook's Distance Points
+cook_cutoff <- 4 / nrow(spotify_data)
+lev_cutoff <- 2 * (length(coef(model_top200)) / nrow(spotify_data))
+
+influence_table <- data.frame(
+  Title = spotify_data$Title,
+  Artists = spotify_data$Artists,
+  cooks = cooks_d_top200,
+  leverage = leverage_top200
+)
+
+influential_points <- influence_table %>%
+  filter(cooks > cook_cutoff & leverage > lev_cutoff)
+
+influential_points
+```
+
+## Conclusion on Influential Points
+
+After analyzing the influential points in our dataset, a small number of observations had both high leverage and high Cook’s distance (approximately 20 out of nearly 8,000 songs, or less than 0.25% of the data). These songs have unusual combinations of audio features that could impact the regression model. However, we found that removing influential observations yielded nearly identical results, indicating that the model’s conclusions are not overly affected by these points. For the Top 200 model, several audio features, including danceability, loudness, speechiness, valence, and multi-artist status, were consistently significant predictors of how long a song remains in the charts. However, the rank model had extremely low explanatory power (R² ≈ 0.003), suggesting that audio features may be poor predictors of a song’s average ranking. This implies that rank is likely influenced by external factors such as marketing, artist popularity, and social trends rather than musical characteristics alone.
