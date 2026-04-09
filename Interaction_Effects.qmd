@@ -4,23 +4,249 @@ format: html
 editor: visual
 ---
 
-## Quarto
+# Interaction Effects
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+## Data Cleaning
 
 ```{r}
-1 + 1
+library(tidyverse)
+
+setwd("/Users/katewest/Desktop/330 final project")
+
+proj_data <- read_delim("Spotify_Dataset_V3.csv", delim = ";")
+
+spotify_clean <- proj_data %>%
+  select(
+    Title,
+    Rank,
+    Artists,
+    Danceability,
+    Energy,
+    Loudness,
+    Speechiness,
+    Acousticness,
+    Instrumentalness,
+    Valence
+  ) %>%
+  mutate(
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0),
+    rank_score = 201 - Rank
+  ) %>%
+  group_by(Title) %>%
+  mutate(
+    days_in_top200 = n()
+  ) %>%
+  ungroup()
+
+spotify_data <- spotify_clean %>%
+  group_by(Title, Artists) %>%
+  summarise(
+    avg_rank_score = mean(rank_score),
+    days_in_top200 = n(),
+    multi_artist = first(multi_artist),
+    Danceability = first(Danceability),
+    Energy = first(Energy),
+    Loudness = first(Loudness),
+    Speechiness = first(Speechiness),
+    Acousticness = first(Acousticness),
+    Instrumentalness = first(Instrumentalness),
+    Valence = first(Valence),
+    .groups = "drop"
+  )
+
+head(spotify_data)
 ```
 
-You can add options to executable code like this
+## Baseline Regression Models (No Interactions)
 
 ```{r}
-#| echo: false
-2 * 2
+model_top200_main <- lm(
+  days_in_top200 ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist,
+  data = spotify_data
+)
+
+model_rank_main <- lm(
+  avg_rank_score ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist,
+  data = spotify_data
+)
+
+summary(model_top200_main)
+summary(model_rank_main)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+## Add Interactions
+
+```{r}
+#Danceability and Energy for Top 200
+model_top200_int1 <- lm(
+  days_in_top200 ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Energy,
+  data = spotify_data
+)
+
+summary(model_top200_int1)
+anova(model_top200_main, model_top200_int1)
+
+#NOT at all even close to significant LOL
+
+#Danceabiility and Energy for Rank
+model_rank_int1 <- lm(
+  avg_rank_score ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Energy,
+  data = spotify_data
+)
+
+summary(model_rank_int1)
+anova(model_rank_main, model_rank_int1)
+#Almost significant tbh
+
+
+# Danceability and Valence for Top 200
+model_top200_int2 <- lm(
+  days_in_top200 ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Valence,
+  data = spotify_data
+)
+
+summary(model_top200_int2)
+anova(model_top200_main, model_top200_int2)
+
+#Very close to significant, right on .05
+
+#Danceability and Valence for Rank
+model_rank_int2 <- lm(avg_rank_score ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Valence,
+  data = spotify_data
+)
+
+summary(model_rank_int2)
+anova(model_rank_main, model_rank_int2)
+
+#Nah not really
+
+
+#Energy and Loudness for Top 200
+model_top200_int3 <- lm(
+  days_in_top200 ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Energy:Loudness,
+  data = spotify_data
+)
+
+summary(model_top200_int3)
+anova(model_top200_main, model_top200_int3)
+
+#Absolutely NOT significant
+
+#Energy and Loudness for Rank
+model_rank_int3 <- lm(
+  avg_rank_score ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Energy:Loudness,
+  data = spotify_data
+)
+
+summary(model_rank_int3)
+anova(model_rank_main, model_rank_int3)
+
+#Very significant!!!!! For predicting rank
+```
+
+-   The **Danceability × Energy** interaction was **not significant** for predicting days in the Top 200, and showed only weak evidence for predicting average rank score.
+    The **Danceability × Valence** interaction showed **borderline evidence** for predicting days in the Top 200 but was **not significant** for predicting rank.
+    The **Energy × Loudness** interaction was **not significant** for predicting days in the Top 200
+    However, the **Energy × Loudness interaction was statistically significant for predicting average rank score**, indicating that the relationship between energy and rank depends on the level of loudness.
+
+## Several Interactions Together
+
+```{r}
+model_top200_allint <- lm(
+  days_in_top200 ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Energy +
+    Danceability:Valence +
+    Energy:Loudness +
+    Speechiness:Acousticness,
+  data = spotify_data
+)
+
+summary(model_top200_allint)
+anova(model_top200_main, model_top200_allint)
+
+
+model_rank_allint <- lm(
+  avg_rank_score ~ Danceability + Energy + Loudness +
+    Speechiness + Acousticness + Instrumentalness +
+    Valence + multi_artist +
+    Danceability:Energy +
+    Danceability:Valence +
+    Energy:Loudness +
+    Speechiness:Acousticness,
+  data = spotify_data
+)
+
+summary(model_rank_allint)
+anova(model_rank_main, model_rank_allint)
+```
+
+## Side Quest: Rank and Days in Top 200
+
+```{r}
+ggplot(spotify_data, aes(x = avg_rank_score, y = days_in_top200)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Relationship Between Rank and Days in Top 200",
+    x = "Average Rank Score (Higher = Better)",
+    y = "Days in Top 200"
+  ) +
+  theme_minimal()
+
+
+cor(spotify_data$avg_rank_score, spotify_data$days_in_top200)
+
+model_relationship <- lm(
+  days_in_top200 ~ avg_rank_score,
+  data = spotify_data
+)
+
+summary(model_relationship)
+
+#Flipped
+model_relationship2 <- lm(
+  avg_rank_score ~ days_in_top200,
+  data = spotify_data
+)
+
+summary(model_relationship2)
+
+
+#with controls!
+model_relationship_controls <- lm(
+  days_in_top200 ~ avg_rank_score + Danceability + Energy +
+    Loudness + Speechiness + Acousticness +
+    Instrumentalness + Valence + multi_artist,
+  data = spotify_data
+)
+
+summary(model_relationship_controls)
+```
+
+# Conclusion
+
+Most interaction effects were not statistically significant, meaning that audio features largely act independently. However, the Energy × Loudness interaction significantly improved prediction of average rank score, meaning that the effect of energy on rank changes depending on loudness. Additionally, Speechiness × Acousticness was significant for predicting days in the Top 200. A moderate positive relationship (r ≈ 0.31) was also observed between Rank and Days in Top 200, indicating that higher-ranked songs tend to stay on the chart longer.
