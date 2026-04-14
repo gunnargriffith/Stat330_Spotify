@@ -13,6 +13,7 @@ editor: visual
 #Get the clean data from the proposal.qmd
 
 head(song_level)
+
 ```
 
 ```{r}
@@ -24,7 +25,19 @@ train_index <- sample(1:n, size = 0.8 * n)
 
 train_data <- song_level[train_index, ]
 test_data  <- song_level[-train_index, ]
+```
 
+```{r}
+
+library(dplyr)
+
+train_data <- train_data %>%
+  select(multi_artist, Danceability, Energy, Speechiness,
+         Acousticness, Valence, days_in_top200, avg_rank_score)
+
+test_data <- test_data %>%
+  select(multi_artist, Danceability, Energy, Speechiness,
+         Acousticness, Valence, days_in_top200, avg_rank_score)
 ```
 
 
@@ -45,9 +58,11 @@ model <- train(
   trControl = train_control
 )
 
+
 ```
 
 ```{r}
+preds <- predict(model, newdata = test_data)
 # Mean Squared Error
 mse <- mean((test_data$days_in_top200 - preds)^2)
 
@@ -57,13 +72,13 @@ rmse <- sqrt(mse)
 rmse
 cor(test_data$days_in_top200, preds)
 ```
+
 ```{r}
 #For comparison
 sd(song_level$days_in_top200)
 mean(song_level$days_in_top200)
 
 ```
-
 
 ```{r}
 set.seed(124)
@@ -77,6 +92,7 @@ model <- train(
   trControl = train_control
 )
 
+preds <- predict(model, newdata = test_data)
 
 # Mean Squared Error
 mse <- mean((test_data$avg_rank_score - preds)^2)
@@ -95,14 +111,3 @@ sd(song_level$avg_rank_score)
 mean(song_level$avg_rank_score)
 
 ```
-
-
-
-
-
-
-
-
-
-
-
