@@ -4,23 +4,117 @@ format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+library(tidyverse)
+library(glmnet)
+setwd("C:/Users/isaia/OneDrive/Documents/Statistics/Stat 330")
+proj_data = read_delim("Spotify_Dataset_V3.csv", delim = ';')
+
+#Starting the new dataset
+spotify_clean <- proj_data %>%
+  select(
+    Title,
+    Rank,
+    Artists,
+    Danceability,
+    Energy,
+    Loudness,
+    Speechiness,
+    Acousticness,
+    Instrumentalness,
+    Valence
+  )
+
+#Creating multi-artist variable so we can easily use it later
+spotify_clean <- spotify_clean %>%
+  mutate(
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  )
+
+#Now flipping the rank variable because 1 should be the best so it's easy to understand
+spotify_clean <- spotify_clean %>%
+  mutate(
+    rank_score = 201 - Rank
+  )
+
+#Trying now to create a "How long the song stayed in the Top 200 Variable"
+spotify_clean <- spotify_clean %>%
+  group_by(Title) %>%
+  mutate(
+    days_in_top200 = n(),
+    multi_artist = ifelse(str_detect(Artists, ","), 1, 0)
+  ) %>%
+  ungroup()
+
+song_level <- spotify_clean %>%
+  group_by(Title, Artists) %>%
+  summarise(
+    avg_rank_score = mean(rank_score),
+    days_in_top200 = n(),
+    multi_artist = first(multi_artist),
+    Danceability = first(Danceability),
+    Energy = first(Energy),
+    Loudness = first(Loudness),
+    Speechiness = first(Speechiness),
+    Acousticness = first(Acousticness),
+    Instrumentalness = first(Instrumentalness),
+    Valence = first(Valence),
+    .groups = "drop"
+  )
+
+
+#view(spotify_clean)
+head(song_level, n = 20
+    )
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
+# set.seed(808)
+# x <- model.matrix(
+#   ~ . - Title - Artists - days_in_top200 - avg_rank_score,
+#   data = song_level
+# )
+# y1 <- song_level$days_in_top200
+# y1_log <- log1p(y1)
+# cv_lasso1 <- cv.glmnet(x, y1_log, alpha = 1)
+# #cv_lasso1 <- cv.glmnet(x, y1, alpha = 1)
+# coef(cv_lasso1, s = "lambda.1se")
+# 
+# y2 <- song_level$avg_rank_score
+# 
+# cv_lasso2 <- cv.glmnet(x, y2, alpha = 1)
+# coef(cv_lasso2, s = "lambda.1se")
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+library(bestglm)
+
+# Log Days in Top 200 Model
+
+# Remove text columns
+df_temp <- song_level[, !(names(song_level) %in% c("Title", "Artists"))]
+
+# Create response from ORIGINAL data
+y1 <- log1p(song_level$days_in_top200)
+
+# Create predictors (remove both response columns)
+x1 <- df_temp[, !(names(df_temp) %in% c("days_in_top200", "avg_rank_score"))]
+
+# Combine
+df1 <- data.frame(x1, y = y1)
+best_bic1 <- bestglm(df1, IC = "BIC")
+summary(best_bic1$BestModel)
+
+# Average Rank Score Model
+
+df2 <- song_level[, !(names(song_level) %in% c("Title", "Artists"))]
+
+y2 <- song_level$avg_rank_score
+
+x2 <- df2[, !(names(df2) %in% c("days_in_top200", "avg_rank_score"))]
+
+df2 <- data.frame(x2, y = y2)
+best_bic2 <- bestglm(df2, IC = "BIC")
+summary(best_bic2$BestModel)
+
+```
