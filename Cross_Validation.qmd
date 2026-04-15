@@ -32,99 +32,81 @@ test_data  <- song_level[-train_index, ]
 library(dplyr)
 
 train_data <- train_data %>%
-  select(multi_artist, Danceability, Speechiness, Instrumentalness, Valence, days_in_top200, avg_rank_score)
+  select(multi_artist, Danceability, Energy, Speechiness,
+         Acousticness, Valence, days_in_top200, avg_rank_score)
 
 test_data <- test_data %>%
-  select(multi_artist, Danceability, Speechiness, Instrumentalness, Valence, days_in_top200, avg_rank_score)
-```
-
- 
-```{r}
-# I'm going to test for days_in_top200 and avg_rank_song as 2 different explaintory varibles.
-
-model_days <- lm(days_in_top200 ~ multi_artist + Danceability + 
-                  Speechiness + Instrumentalness + Valence,
-                data = train_data)
-
-model_rank <- lm(avg_rank_score ~ multi_artist + Danceability + 
-                  Speechiness + Instrumentalness + Valence,
-                data = train_data)
-
-pred_days <- predict(model_days, newdata = test_data)
-pred_rank <- predict(model_rank, newdata = test_data)
-
-rmse <- function(actual, predicted) {
-  sqrt(mean((actual - predicted)^2))
-}
-
+  select(multi_artist, Danceability, Energy, Speechiness,
+         Acousticness, Valence, days_in_top200, avg_rank_score)
 ```
 
 ```{r}
-#Inital test days
-rmse_days <- rmse(test_data$days_in_top200, pred_days)
-cor_days <- cor(test_data$days_in_top200, pred_days)
+#Predictions for days in top 200
 
-rmse_days
-cor_days
-```
-
-```{r}
-#Initial test rank
-rmse_rank <- rmse(test_data$avg_rank_score, pred_rank)
-cor_rank <- cor(test_data$avg_rank_score, pred_rank)
-
-rmse_rank
-cor_rank
-```
-
-```{r}
-
+#install.packages("caret")
 library(caret)
 
-train_control <- trainControl(method = "cv", number = 5)
+set.seed(124)
 
-model_cv_days <- train(days_in_top200 ~ ., data = train_data,
-                       method = "lm",
-                       trControl = train_control)
+train_control <- trainControl(method = "cv", number = 10)
 
-model_cv_rank <- train(avg_rank_score ~ ., data = train_data,
-                       method = "lm",
-                       trControl = train_control)
-
-
-```
-
-```{r}
-
-
-plot(test_data$days_in_top200, pred_days,
-     xlab = "Actual",
-     ylab = "Predicted",
-     main = "Predicted vs Actual (days_in_top200)")
-
-abline(0, 1, col = "red")
-
-plot(test_data$avg_rank_score, pred_rank,
-     xlab = "Actual",
-     ylab = "Predicted",
-     main = "Predicted vs Actual (avg_rank_score)")
-
-abline(0, 1, col = "red")
+model <- train(
+  days_in_top200 ~ multi_artist + Danceability + Energy + Speechiness + Acousticness + Valence,
+  data = song_level,
+  method = "lm",
+  trControl = train_control
+)
 
 
 ```
 
 ```{r}
-res_days <- test_data$days_in_top200 - pred_days
+preds <- predict(model, newdata = test_data)
+# Mean Squared Error
+mse <- mean((test_data$days_in_top200 - preds)^2)
 
-plot(pred_days, res_days,
-     xlab = "Predicted",
-     ylab = "Residuals",
-     main = "Residual Plot (days_in_top200)")
-abline(h = 0, col = "red")
+# Root MSE
+rmse <- sqrt(mse)
 
-
-hist(res_days, main = "Residuals Distribution", xlab = "Residuals")
+rmse
+cor(test_data$days_in_top200, preds)
 ```
 
+```{r}
+#For comparison
+sd(song_level$days_in_top200)
+mean(song_level$days_in_top200)
 
+```
+
+```{r}
+set.seed(124)
+
+train_control <- trainControl(method = "cv", number = 10)
+
+model <- train(
+  avg_rank_score ~ multi_artist + Danceability + Energy + Speechiness + Acousticness + Valence,
+  data = song_level,
+  method = "lm",
+  trControl = train_control
+)
+
+preds <- predict(model, newdata = test_data)
+
+# Mean Squared Error
+mse <- mean((test_data$avg_rank_score - preds)^2)
+
+# Root MSE
+rmse <- sqrt(mse)
+
+rmse
+cor(test_data$avg_rank_score, preds)
+
+```
+
+```{r}
+#For comparison
+sd(song_level$avg_rank_score)
+mean(song_level$avg_rank_score)
+
+```

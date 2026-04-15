@@ -15,6 +15,7 @@ setwd("/Users/katewest/Desktop/330 final project")
 
 proj_data <- read_delim("Spotify_Dataset_V3.csv", delim = ";")
 
+#Cleaning up the data
 spotify_clean <- proj_data %>%
   select(
     Title,
@@ -38,6 +39,7 @@ spotify_clean <- proj_data %>%
   ) %>%
   ungroup()
 
+#Continuing to clean the data
 spotify_data <- spotify_clean %>%
   group_by(Title, Artists) %>%
   summarise(
@@ -60,6 +62,7 @@ head(spotify_data)
 ## Baseline Regression Models (No Interactions)
 
 ```{r}
+#Basic regression model for main
 model_top200_main <- lm(
   days_in_top200 ~ Danceability + Energy + Loudness +
     Speechiness + Acousticness + Instrumentalness +
@@ -166,10 +169,7 @@ anova(model_rank_main, model_rank_int3)
 #Very significant!!!!! For predicting rank
 ```
 
--   The **Danceability × Energy** interaction was **not significant** for predicting days in the Top 200, and showed only weak evidence for predicting average rank score.
-    The **Danceability × Valence** interaction showed **borderline evidence** for predicting days in the Top 200 but was **not significant** for predicting rank.
-    The **Energy × Loudness** interaction was **not significant** for predicting days in the Top 200
-    However, the **Energy × Loudness interaction was statistically significant for predicting average rank score**, indicating that the relationship between energy and rank depends on the level of loudness.
+-   The **Danceability × Energy** interaction was **not significant** for predicting days in the Top 200, and showed only weak evidence for predicting average rank score. The **Danceability × Valence** interaction showed **borderline evidence** for predicting days in the Top 200 but was **not significant** for predicting rank. The **Energy × Loudness** interaction was **not significant** for predicting days in the Top 200 However, the **Energy × Loudness interaction was statistically significant for predicting average rank score**, indicating that the relationship between energy and rank depends on the level of loudness.
 
 ## Several Interactions Together
 
@@ -250,3 +250,34 @@ summary(model_relationship_controls)
 # Conclusion
 
 Most interaction effects were not statistically significant, meaning that audio features largely act independently. However, the Energy × Loudness interaction significantly improved prediction of average rank score, meaning that the effect of energy on rank changes depending on loudness. Additionally, Speechiness × Acousticness was significant for predicting days in the Top 200. A moderate positive relationship (r ≈ 0.31) was also observed between Rank and Days in Top 200, indicating that higher-ranked songs tend to stay on the chart longer.
+
+## **FINAL MODEL WE WILL USE**
+
+```{r}
+#FOR TOP 200
+model_top200_allint <- lm(
+  days_in_top200 ~ Danceability +
+    Speechiness + Valence + Instrumentalness + multi_artist + Acousticness + Speechiness:Acousticness,
+  data = spotify_data
+)
+
+
+
+summary(model_top200_allint)
+
+
+
+#FOR RANK
+
+model_rank_allint <- lm(
+  avg_rank_score ~ Energy + Loudness + Loudness:Energy,
+  data = spotify_data
+)
+
+summary(model_rank_allint)
+
+
+
+
+
+```
